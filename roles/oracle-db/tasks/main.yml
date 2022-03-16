@@ -1,0 +1,148 @@
+---
+# tasks file for oracle-db
+- name: Display pre database software install message
+  debug:
+   msg:
+    - 'Oracle Database Software 19c Installation started for Single Instance at {{ansible_date_time.iso8601}}:'
+
+- name: Check Disk space available
+  command: df -h
+  register: disk_usage
+  
+- debug: var=disk_usage.stdout_lines
+
+- name: Check if swap file exists
+  stat:
+    path: "{{ swap_file }}"
+  register: swap_file_check
+
+- name: To Create swap file
+  become: yes
+  command: fallocate -l {{ swap_space }} {{ swap_file }}
+  when: not swap_file_check.stat.exists
+
+- name: Define swap memory
+  shell: "dd if=/dev/zero of=/swapfile count=2024 bs=1MiB"
+  when: not swap_file_check.stat.exists
+
+- name: Set file permissions on swap file
+  become: yes
+  file: 
+    path: "{{ swap_file }}"
+    mode: 0600
+  when: not swap_file_check.stat.exists
+
+- name: Enable swap file
+  shell: mkswap /swapfile
+  when: not swap_file_check.stat.exists
+
+- name: Write swap entry to /etc/fstab
+  mount: name=swap
+    src= "{{ swap_file }}"
+    fstype=swap
+    opts=sw
+    passno=0
+    dump=0
+    state=present
+
+- name: Ensure dba groups exists
+  group:
+    name: "{{ item.name }}"
+    gid: "{{ item.uid }}"
+    state: present
+  with_items:
+    - { name: oinstall, uid: 54321 }
+    - { name: dba, uid: 54322 }
+    - { name: oper, uid: 54323 }
+
+- name: Ensure oracle user exists and assigned to valid group
+  user:
+    name: oracle
+    uid: 54321
+    group: oinstall 
+    groups: dba,oper,oinstall
+    state: present
+
+- name: Create a required oracle directories
+  remote_user: "{{ root_user }}"
+  file:
+     path: "{{ item }}"
+     state: directory
+     owner: "{{ oracle_user }}"
+     group: "{{ oracle_install_group }}"
+     mode: 0775
+  with_items:
+    - "{{ oracle_base }}"
+    - "{{ oracle_home }}"
+
+- name: Extract Oracle Database software to target oracle_home directory
+  remote_user: "{{ root_user }}"
+  become: yes
+  unarchive:
+    src: "{{ tmp_dir }}/LINUX.X64_193000_db_home.zip"
+    dest: "{{ oracle_home }}"
+    remote_src: no
+    mode: 0775
+    group: "{{ oracle_install_group }}"
+    owner: "{{ oracle_user }}"
+
+- name: Create a Oracle Database Software silent response File
+  template: 
+    src: "{{ oradbrsp }}" 
+    dest: "{{ tmp_dir }}/{{ db_install_rsp }}.rsp"
+    owner: "{{ oracle_user }}" 
+    group: "{{ oracle_install_group }}"
+    mode: '0775'
+
+- name: Run Prechecks using runInstaller
+  become: yes
+  become_user: oracle
+  shell: "{{ item }}"
+  args:
+    chdir: "{{ oracle_home }}"
+  register: run_installer_prechecks
+  with_items:
+    - "./runInstaller -silent -executePrereqs -responseFile {{ tmp_dir }}/{{ db_install_rsp }}.rsp"
+
+- debug: 
+    msg: "{{ run_installer_prechecks.results }}"
+
+- name: Starting Oracle Database Installation in silentmode using responsefile
+  become: yes
+  become_user: oracle
+  shell:
+        "./runInstaller -silent -responseFile {{ tmp_dir }}/{{ db_install_rsp }}.rsp"
+  args:
+    chdir: "{{ oracle_home }}"
+  async: "{{ ansible_check_mode | ternary(0,3600) }}"
+  poll: 10
+  register: run_installer_responseFile
+  loop_control: 
+    label: "{{ run_installer_responseFile.results }}"
+
+- name: Execute root.sh script Post installation of oracle db
+  shell: "./{{ item.name }}"
+  args:
+     chdir: "{{ item.path }}"
+  with_items:
+  - { name: orainstRoot.sh , path: "{{ oracle_inventory }}" }
+  - { name: root.sh , path: "{{ oracle_home }}" }
+  register: root_script_out
+
+- debug: msg= "{{ item.stdout_lines }}"
+  with_items: "{{ root_script_out.results }}"
+
+- name: Display Post Installation of oracle Database software
+  environment:
+   ORACLE_HOME: /u01/app/oracle/product/19.3.0/db_01
+  
+  become: yes
+  become_user: oracle
+  shell: | 
+        export $ORACLE_HOME
+        "{{ oracle_home }}"/bin/sqlplus -version
+  register: oracle_version
+- name: Installation of Oracle Software is Completed 
+  debug: 
+    msg= "{{ item }}"
+  with_items: "{{ oracle_version.stdout_lines }}"

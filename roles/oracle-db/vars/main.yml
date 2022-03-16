@@ -1,0 +1,26 @@
+---
+# vars file for oracle-db
+  oracle_user: "oracle"
+  root_user: "root"
+  oracle_db: "sredb"
+  oracle_install_group: "oinstall"
+  oracle_base: "/u01"
+  oracle_main: "{{ oracle_base }}/app/oracle"
+  tmp_dir: /tmp
+  swap_file: /swapfile
+  swap_space: 2048
+  flagFile: LINUX.X64_193000_db_home.zip
+  oracle_installer_path: "/u01/app/oracle/product/19.3.0/db_01"
+  oracle_inventory: "/u01/app/oracle/oraInventory"
+  oracle_home: "{{ oracle_main }}/product/19.3.0/db_01"
+  oradbrsp: roles/oracle-db/templates/db_install.rsp.j2
+  db_install_rsp: db_install
+  Installedition:  EE
+  DBA_GROUP: dba
+  OPER_GROUP: oper
+  OSOTHERS_GROUP: oinstall
+  opatchenv: 
+  environment:
+   ORACLE_HOME: "{{ oracle_home }}"
+   ORACLE_MAIN: "{{ oracle_base }}/app/oracle"
+   PATH: "{{ oracle_home }}/Opatch/bin:$PATH:/usr/local/bin/:/bin/:/sbin:/usr/bin:/usr/sbin"

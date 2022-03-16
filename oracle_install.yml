@@ -1,0 +1,8 @@
+---
+ - name: Installation of oracle database software 19c
+   hosts: [local]
+   become: yes
+   become_user: "{{ root_user }}"
+   roles:
+      - oracle-db
+  
