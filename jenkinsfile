@@ -1,0 +1,16 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Git checkout') {
+            steps {
+                git 'https://github.com/sree-web/ansible-automation.git'
+            }
+        stage('Execute Ansible playbook') {
+            steps {
+                ansiblePlaybook credentialsId: 'credentials', disableHostKeyChecking: true, installation: 'ansible', inventory: 'dev.inv', playbook: 'oracle_install.yml'
+            }
+          }
+        }
+       }
+    }
